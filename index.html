@@ -562,12 +562,53 @@
       </div>
       <div id="decode-status" class="decode-status" role="status" aria-live="polite"></div>
     </section>
+
+    <!-- ============ Aircraft address ($PSRFA, perryc/SoftRF fork) ============ -->
+    <section class="card" id="addr-card">
+      <h2>Aircraft address ($PSRFA)</h2>
+      <p class="hint">
+        Sets the 24-bit ICAO (Mode S) address the unit transmits as its ident on
+        FLARM / OGNTP / FANET and reports as ownship over GDL90. Requires the
+        <a href="https://github.com/perryc/SoftRF/tree/aircraft-address" target="_blank" rel="noopener">aircraft-address SoftRF firmware</a>;
+        stock SoftRF ignores the sentence. Enter a Canadian registration and the address
+        is looked up in the bundled Transport Canada register (every registered aircraft,
+        ultralights included), or type a hex address directly.
+      </p>
+      <div class="actions" style="align-items:flex-end;flex-wrap:wrap;gap:1rem">
+        <label style="display:flex;flex-direction:column;gap:.3rem">
+          <span>Canadian registration</span>
+          <input id="addr-reg" class="decode-area" style="width:11ch;text-transform:uppercase" maxlength="6"
+                 placeholder="C-FMHP" spellcheck="false" autocomplete="off">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:.3rem">
+          <span>ICAO address (hex)</span>
+          <input id="addr-hex" class="decode-area" style="width:9ch;text-transform:uppercase" maxlength="6"
+                 placeholder="C02076" spellcheck="false" autocomplete="off">
+        </label>
+      </div>
+      <div id="addr-status" class="decode-status" role="status" aria-live="polite"></div>
+      <h3 style="margin-top:1rem">Set</h3>
+      <code class="command" id="addr-output"></code>
+      <div class="actions">
+        <button class="btn" id="addr-copy" type="button">Copy set command</button>
+        <button class="btn btn--ghost" id="addr-copy-query" type="button">Copy query ($PSRFA,?)</button>
+      </div>
+      <p class="note" id="addr-note" role="status"></p>
+      <p class="hint" style="margin-top:.6rem">
+        Send the set command to the unit (serial or BLE terminal); it stores the address and
+        restarts. The query returns <code>$PSRFA,1,&lt;hex&gt;</code>. An address of 000000
+        reverts to the chip-derived default. Register snapshot: <span id="addr-regdate"></span>.
+      </p>
+    </section>
   </main>
+
+  <script src="ca_register.js"></script>
 
   <footer class="site-footer">
     <div class="container" data-i18n="footer">
       Command format, parameter order and defaults identical to the original tool ·
-      one file, no network access, no trackers.
+      no network access, no trackers · fork adds the $PSRFA aircraft address panel
+      with a bundled Canadian aircraft register.
     </div>
   </footer>
 
@@ -1143,6 +1184,73 @@
         syncTheme();
       });
       syncTheme();
+
+      // ---------- Aircraft address ($PSRFA) ----------
+      const nmeaWrap = (body) => {
+        let sum = 0;
+        for (let i = 0; i < body.length; i++) sum ^= body.charCodeAt(i);
+        return '$' + body + '*' + sum.toString(16).toUpperCase().padStart(2, '0');
+      };
+      // Canada allocates C-FAAA..C-GZZZ sequentially from C00001
+      const caFormula = (mark) => {
+        if (!/^[FG][A-Z]{3}$/.test(mark)) return null;
+        const off = (mark[0] === 'F' ? 0 : 17576)
+          + (mark.charCodeAt(1) - 65) * 676 + (mark.charCodeAt(2) - 65) * 26 + (mark.charCodeAt(3) - 65);
+        return 0xC00001 + off;
+      };
+      // -> { hex, model, source } or null
+      const caLookup = (input) => {
+        const mark = input.toUpperCase().replace(/[^A-Z]/g, '').replace(/^C/, '');
+        if (!mark) return null;
+        const reg = (window.CA_REGISTER || {})[mark];
+        if (reg !== undefined) {
+          const parts = reg.split('|');
+          const hex = parts.length === 2 ? parts[0] : caFormula(mark).toString(16).toUpperCase();
+          return { mark: 'C-' + mark, hex, model: parts[parts.length - 1], source: 'register' };
+        }
+        const f = caFormula(mark);
+        return f ? { mark: 'C-' + mark, hex: f.toString(16).toUpperCase(), model: '', source: 'formula' } : null;
+      };
+      const addrReg = document.getElementById('addr-reg');
+      const addrHex = document.getElementById('addr-hex');
+      const addrStatus = document.getElementById('addr-status');
+      const addrOutput = document.getElementById('addr-output');
+      const addrNote = document.getElementById('addr-note');
+      document.getElementById('addr-regdate').textContent = window.CA_REGISTER_DATE || 'not loaded';
+
+      const renderAddr = () => {
+        const hex = addrHex.value.toUpperCase().replace(/[^0-9A-F]/g, '');
+        addrOutput.textContent = /^[0-9A-F]{6}$/.test(hex) ? nmeaWrap('PSRFA,1,' + hex) : '';
+      };
+      addrReg.addEventListener('input', () => {
+        const r = caLookup(addrReg.value);
+        if (!r) {
+          addrStatus.textContent = addrReg.value.trim() ? 'Not found in the Canadian register.' : '';
+          return;
+        }
+        addrHex.value = r.hex;
+        addrStatus.textContent = r.mark + ' \u2192 ' + r.hex
+          + (r.model ? ' \u00b7 ' + r.model : '')
+          + (r.source === 'formula' ? ' (not in the register snapshot; derived from the mark)' : '');
+        renderAddr();
+      });
+      addrHex.addEventListener('input', () => {
+        if (document.activeElement === addrHex) { addrReg.value = ''; addrStatus.textContent = ''; }
+        renderAddr();
+      });
+      const copyText = async (text, note) => {
+        try { await navigator.clipboard.writeText(text); } catch (e) {
+          const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy'); ta.remove();
+        }
+        addrNote.textContent = note;
+        setTimeout(() => { addrNote.textContent = ''; }, 2500);
+      };
+      document.getElementById('addr-copy').addEventListener('click', () => {
+        if (addrOutput.textContent) copyText(addrOutput.textContent, currentDict.copied);
+      });
+      document.getElementById('addr-copy-query').addEventListener('click', () =>
+        copyText(nmeaWrap('PSRFA,?'), currentDict.copied));
 
       update();
     })();

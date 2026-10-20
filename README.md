@@ -51,3 +51,16 @@ The original SoftRF project and protocol definitions are maintained by the SoftR
 ![GPLv3 Logo](https://www.gnu.org/graphics/gplv3-with-text-136x68.png)
 
 This project is licensed under the GNU General Public License v3.0 or later (GPL-3.0-or-later).
+
+## Fork: aircraft address ($PSRFA)
+
+This fork adds an **Aircraft address** panel for units running the
+[perryc/SoftRF `aircraft-address` firmware](https://github.com/perryc/SoftRF/tree/aircraft-address).
+Type a Canadian registration (e.g. `C-FMHP`) and the 24-bit ICAO (Mode S) address is
+looked up in a bundled snapshot of Transport Canada's Canadian Civil Aircraft Register
+(`ca_register.js`, every registered aircraft including C-I ultralights), or type a hex
+address directly. The page produces `$PSRFA,1,<hex>*hh` to set it and `$PSRFA,?*hh` to
+read it back.
+
+Refresh the register with `python3 tools/build_ca_register.py carscurr.txt` after
+downloading [ccarcsdb.zip](https://wwwapps.tc.gc.ca/saf-sec-sur/2/ccarcs-riacc/download/ccarcsdb.zip).
