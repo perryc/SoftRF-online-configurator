@@ -587,6 +587,10 @@
         </label>
       </div>
       <div id="addr-status" class="decode-status" role="status" aria-live="polite"></div>
+      <label style="display:flex;align-items:center;gap:.5rem;margin-top:.75rem">
+        <input id="addr-mux" type="checkbox">
+        <span>Also receive 1090 ADS-B (FANET/1090 mux, LR2021 units on FANET; slower updates on both bands)</span>
+      </label>
       <h3 style="margin-top:1rem">Set</h3>
       <code class="command" id="addr-output"></code>
       <div class="actions">
@@ -596,7 +600,7 @@
       <p class="note" id="addr-note" role="status"></p>
       <p class="hint" style="margin-top:.6rem">
         Send the set command to the unit (serial or BLE terminal); it stores the address and
-        restarts. The query returns <code>$PSRFA,1,&lt;hex&gt;</code>. An address of 000000
+        restarts. The query returns <code>$PSRFA,1,&lt;hex&gt;,&lt;mux&gt;</code>. An address of 000000
         reverts to the chip-derived default. Register snapshot: <span id="addr-regdate"></span>.
       </p>
     </section>
@@ -1216,11 +1220,13 @@
       const addrStatus = document.getElementById('addr-status');
       const addrOutput = document.getElementById('addr-output');
       const addrNote = document.getElementById('addr-note');
+      const addrMux = document.getElementById('addr-mux');
       document.getElementById('addr-regdate').textContent = window.CA_REGISTER_DATE || 'not loaded';
 
       const renderAddr = () => {
         const hex = addrHex.value.toUpperCase().replace(/[^0-9A-F]/g, '');
-        addrOutput.textContent = /^[0-9A-F]{6}$/.test(hex) ? nmeaWrap('PSRFA,1,' + hex) : '';
+        addrOutput.textContent = /^[0-9A-F]{6}$/.test(hex)
+          ? nmeaWrap('PSRFA,1,' + hex + ',' + (addrMux.checked ? '1' : '0')) : '';
       };
       addrReg.addEventListener('input', () => {
         const r = caLookup(addrReg.value);
@@ -1234,6 +1240,7 @@
           + (r.source === 'formula' ? ' (not in the register snapshot; derived from the mark)' : '');
         renderAddr();
       });
+      addrMux.addEventListener('change', renderAddr);
       addrHex.addEventListener('input', () => {
         if (document.activeElement === addrHex) { addrReg.value = ''; addrStatus.textContent = ''; }
         renderAddr();
